@@ -1,19 +1,31 @@
-// ─── Weltrade Academy Engine v2 ───────────────────────────────────────────────
-// Этот файл не трогаем при добавлении новых модулей.
-// Новый модуль = новый modXX.js файл + <script> в index.html.
+// ─── Weltrade Academy Engine v4 (with Analytics + Bot Sync) ──────────────────
+// analytics.js должен быть загружен ДО этого файла в index.html
 
-// ─── Telegram Init ────────────────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-// ─── Module Registry ──────────────────────────────────────────────────────────
-// Заполняется через window.WT_MODULES в каждом modXX.js
 const MODULES = window.WT_MODULES || [];
-
 if (!MODULES.length) {
   document.getElementById("root").innerHTML =
     `<div style="color:#fff;padding:40px;text-align:center">No modules found.</div>`;
   throw new Error("WT: no modules loaded");
+}
+
+// ─── Bot Sync ─────────────────────────────────────────────────────────────────
+// Замени на свой Railway URL
+const BOT_WEBHOOK_URL = "https://web-production-17cd34.up.railway.app/tma-webhook";
+
+function syncProgressToBot(payload) {
+  try {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!tgUser?.id) return;
+    fetch(BOT_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: tgUser.id, ...payload }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 // ─── Global State ─────────────────────────────────────────────────────────────
@@ -22,11 +34,13 @@ const GLOBAL_KEY = "wt_global_state";
 function loadGlobal() {
   try {
     return JSON.parse(localStorage.getItem(GLOBAL_KEY)) || {
-      currentModuleIndex: 0,  // какой модуль сейчас активен
-      completedModules: [],   // массив id завершённых модулей
+      currentModuleIndex: 0,
+      completedModules: [],
+      totalXP: 0,
+      firstOpenedAt: Date.now(),
     };
   } catch (e) {
-    return { currentModuleIndex: 0, completedModules: [] };
+    return { currentModuleIndex: 0, completedModules: [], totalXP: 0, firstOpenedAt: Date.now() };
   }
 }
 
@@ -40,13 +54,10 @@ function moduleKey(mod) { return `wt_state_${mod.id}`; }
 function loadModuleState(mod) {
   try {
     return JSON.parse(localStorage.getItem(moduleKey(mod))) || {
-      phase: "cards",     // cards | quiz | complete
-      cardIndex: 0,
-      quizIndex: 0,
-      quizScore: 0,
+      phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0,
     };
   } catch (e) {
-    return { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0 };
+    return { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0 };
   }
 }
 
@@ -56,10 +67,9 @@ function saveModuleState(mod, s) {
 
 // ─── UTM Builder ──────────────────────────────────────────────────────────────
 function buildURL(baseUrl, utmContent) {
-  // Партнёрские ссылки (track.gowt.me) уже имеют свои параметры —
-  // просто добавляем UTM через & не перезаписывая bta/brand
+  const modId = utmContent.split("_")[0] + "_" + utmContent.split("_")[1];
   const sep = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${sep}utm_source=telegram_organic&utm_medium=tma&utm_campaign=${encodeURIComponent(utmContent.split("_")[0] + "_" + utmContent.split("_")[1])}&utm_content=${encodeURIComponent(utmContent)}`;
+  return `${baseUrl}${sep}utm_source=telegram_organic&utm_medium=tma&utm_campaign=${encodeURIComponent(modId)}&utm_content=${encodeURIComponent(utmContent)}`;
 }
 
 function openLink(url) {
@@ -72,8 +82,8 @@ const $ = id => document.getElementById(id);
 const TOTAL_STEPS = mod => mod.cards.length + mod.quiz.length;
 
 function currentStep(mod, s) {
-  if (s.phase === "cards")    return s.cardIndex + 1;
-  if (s.phase === "quiz")     return mod.cards.length + s.quizIndex + 1;
+  if (s.phase === "cards") return s.cardIndex + 1;
+  if (s.phase === "quiz")  return mod.cards.length + s.quizIndex + 1;
   return TOTAL_STEPS(mod);
 }
 
@@ -83,32 +93,30 @@ function currentAccent(mod, s) {
   return "#00C896";
 }
 
-// ─── Home Screen (список модулей) ─────────────────────────────────────────────
-function renderHome() {
+// ─── Home Screen ──────────────────────────────────────────────────────────────
+window.renderHome = function() {
   const g = loadGlobal();
+
+  if (!sessionStorage.getItem("wt_session_started")) {
+    sessionStorage.setItem("wt_session_started", "1");
+    window.trackAcademyOpened?.();
+  }
 
   document.getElementById("root").innerHTML = `
     <div style="min-height:100vh;background:#0a0a0f;padding:24px 20px 32px;position:relative;overflow:hidden;">
       <div style="position:absolute;top:-60px;right:-60px;width:240px;height:240px;border-radius:50%;background:#6C63FF;opacity:.07;filter:blur(70px);pointer-events:none;"></div>
 
-      <!-- Header -->
       <div style="margin-bottom:28px;">
         <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;">Weltrade</div>
         <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.2;">Academy</div>
         <div style="font-size:13px;color:rgba(255,255,255,.4);margin-top:6px;">Master trading, one module at a time.</div>
       </div>
 
-      <!-- XP总计 -->
       <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px 16px;margin-bottom:24px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:22px;">⚡</span>
         <div>
           <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.05em;text-transform:uppercase;">Total XP earned</div>
-          <div style="font-size:22px;font-weight:800;color:#FFB830;">
-            ${g.completedModules.reduce((acc, id) => {
-              const m = MODULES.find(m => m.id === id);
-              return acc + (m ? m.totalXP : 0);
-            }, 0)} XP
-          </div>
+          <div style="font-size:22px;font-weight:800;color:#FFB830;">${g.totalXP} XP</div>
         </div>
         <div style="margin-left:auto;text-align:right;">
           <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.05em;text-transform:uppercase;">Completed</div>
@@ -116,36 +124,25 @@ function renderHome() {
         </div>
       </div>
 
-      <!-- Module list -->
       <div style="display:flex;flex-direction:column;gap:10px;">
         ${MODULES.map((mod, idx) => {
           const done = g.completedModules.includes(mod.id);
           const active = idx === g.currentModuleIndex;
           const locked = idx > g.currentModuleIndex;
           const ms = loadModuleState(mod);
-          const pct = done ? 100 : Math.round((currentStep(mod, ms) - 1) / TOTAL_STEPS(mod) * 100);
-
+          const pct = done ? 100 : Math.max(0, Math.round((currentStep(mod, ms) - 1) / TOTAL_STEPS(mod) * 100));
           const borderColor = done ? "#00C896" : active ? "#6C63FF" : "rgba(255,255,255,.08)";
           const numBg = done ? "rgba(0,200,150,.15)" : active ? "rgba(108,99,255,.15)" : "rgba(255,255,255,.04)";
           const numColor = done ? "#00C896" : active ? "#6C63FF" : "rgba(255,255,255,.3)";
-
           return `
           <div onclick="${locked ? "" : `startModule(${idx})`}" style="
-            background:rgba(255,255,255,.04);
-            border:1px solid ${borderColor};
-            border-radius:16px;padding:16px;
-            display:flex;align-items:center;gap:14px;
-            cursor:${locked ? "default" : "pointer"};
-            opacity:${locked ? .45 : 1};
-            transition:opacity .2s;
+            background:rgba(255,255,255,.04);border:1px solid ${borderColor};
+            border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px;
+            cursor:${locked ? "default" : "pointer"};opacity:${locked ? .45 : 1};transition:opacity .2s;
           ">
-            <div style="
-              width:40px;height:40px;border-radius:50%;flex-shrink:0;
-              background:${numBg};border:1.5px solid ${borderColor};
-              display:flex;align-items:center;justify-content:center;
-              font-size:${done ? "18px" : "13px"};font-weight:700;color:${numColor};
-            ">${done ? "✓" : String(idx + 1).padStart(2, "0")}</div>
-
+            <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;background:${numBg};border:1.5px solid ${borderColor};display:flex;align-items:center;justify-content:center;font-size:${done ? "18px" : "13px"};font-weight:700;color:${numColor};">
+              ${done ? "✓" : String(idx + 1).padStart(2, "0")}
+            </div>
             <div style="flex:1;min-width:0;">
               <div style="font-size:14px;font-weight:700;color:${locked ? "rgba(255,255,255,.3)" : "#fff"};margin-bottom:3px;">${mod.title}</div>
               <div style="font-size:11px;color:rgba(255,255,255,.35);">${mod.cards.length} cards · ${mod.quiz.length} questions · +${mod.totalXP} XP</div>
@@ -154,16 +151,13 @@ function renderHome() {
                 <div style="height:100%;width:${pct}%;background:#6C63FF;border-radius:999px;"></div>
               </div>` : ""}
             </div>
-
-            <div style="font-size:20px;flex-shrink:0;">
-              ${done ? mod.badge.icon : locked ? "🔒" : "▶"}
-            </div>
+            <div style="font-size:20px;flex-shrink:0;">${done ? mod.badge.icon : locked ? "🔒" : "▶"}</div>
           </div>`;
         }).join("")}
       </div>
     </div>
   `;
-}
+};
 
 // ─── Start Module ─────────────────────────────────────────────────────────────
 window.startModule = function(idx) {
@@ -172,6 +166,18 @@ window.startModule = function(idx) {
   saveGlobal(g);
   const mod = MODULES[idx];
   const s = loadModuleState(mod);
+
+  if (s.cardIndex === 0 && s.phase === "cards") {
+    window.trackModuleStarted?.(mod, idx);
+  }
+
+  // Синкаем прогресс боту — он знает где юзер для персональных пушей
+  syncProgressToBot({
+    event:        "module_opened",
+    module_id:    mod.id,
+    module_title: mod.title,
+  });
+
   if (s.phase === "cards")     renderCard(mod, s);
   else if (s.phase === "quiz") renderQuiz(mod, s);
   else                         renderComplete(mod, s);
@@ -186,14 +192,9 @@ function renderShell(mod, s) {
     <div id="app" style="min-height:100vh;display:flex;flex-direction:column;background:#0a0a0f;position:relative;overflow:hidden;">
       <div style="position:absolute;top:-80px;right:-80px;width:280px;height:280px;border-radius:50%;background:${acc};opacity:.07;filter:blur(70px);pointer-events:none;transition:background .6s;"></div>
 
-      <!-- Header -->
       <div style="padding:16px 20px 14px;position:relative;z-index:1;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <button onclick="renderHome()" style="
-            background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-            border-radius:999px;padding:4px 12px;
-            font-size:12px;color:rgba(255,255,255,.6);cursor:pointer;
-          ">← Back</button>
+          <button onclick="renderHome()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:4px 12px;font-size:12px;color:rgba(255,255,255,.6);cursor:pointer;">← Back</button>
           <div style="flex:1;font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mod.title}</div>
           <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:4px 10px;font-size:11px;color:rgba(255,255,255,.9);font-weight:700;flex-shrink:0;">⚡ ${mod.totalXP}</div>
         </div>
@@ -208,7 +209,6 @@ function renderShell(mod, s) {
 
       <div id="content" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:4px 20px 16px;position:relative;z-index:1;"></div>
 
-      <!-- Dots -->
       <div style="display:flex;justify-content:center;align-items:center;gap:5px;padding-bottom:20px;z-index:1;">
         ${mod.cards.map((_, i) => `
           <div style="height:5px;border-radius:999px;transition:all .3s ease;
@@ -216,7 +216,7 @@ function renderShell(mod, s) {
             background:${i < s.cardIndex || s.phase !== "cards" ? acc : i === s.cardIndex && s.phase === "cards" ? acc : "rgba(255,255,255,.2)"};
             opacity:${i > s.cardIndex && s.phase === "cards" ? .4 : 1};
           "></div>`).join("")}
-        <div style="height:5px;width:5px;border-radius:999px;transition:all .3s;background:${s.phase === "quiz" ? "#FFB830" : "rgba(255,255,255,.2)"};"></div>
+        <div style="height:5px;width:5px;border-radius:999px;background:${s.phase === "quiz" ? "#FFB830" : "rgba(255,255,255,.2)"};transition:all .3s;"></div>
       </div>
     </div>
   `;
@@ -227,6 +227,8 @@ function renderCard(mod, s) {
   renderShell(mod, s);
   const card = mod.cards[s.cardIndex];
   const isLast = s.cardIndex === mod.cards.length - 1;
+
+  window.trackCardViewed?.(mod, s.cardIndex, card);
 
   $("content").innerHTML = `
     <div id="cw" style="transform:translateX(60px);opacity:0;transition:transform .32s cubic-bezier(.4,0,.2,1),opacity .32s;">
@@ -244,11 +246,9 @@ function renderCard(mod, s) {
           <span style="font-size:12px;color:rgba(255,255,255,.45);">${card.stat.label}</span>
         </div>` : ""}
       </div>
-
       <button onclick="nextCard()" style="width:100%;padding:15px 0;border:none;border-radius:14px;background:${card.accent};color:#0a0a0f;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 18px ${card.accent}44;${card.demoCTA ? "margin-bottom:10px;" : ""}">
         ${isLast ? "Take the quiz 🎯" : "Next →"}
       </button>
-
       ${card.demoCTA ? `
       <button onclick="openDemo()" style="width:100%;padding:13px 0;border:1px solid rgba(255,255,255,.15);border-radius:14px;background:transparent;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;">
         Try demo account first →
@@ -268,6 +268,11 @@ let _quizRevealed = false;
 function renderQuiz(mod, s) {
   renderShell(mod, s);
   _quizRevealed = false;
+
+  if (s.quizIndex === 0) {
+    window.trackQuizStarted?.(mod);
+  }
+
   const q = mod.quiz[s.quizIndex];
   const letters = ["A", "B", "C", "D"];
 
@@ -299,19 +304,31 @@ function renderComplete(mod, s) {
   const score = s.quizScore;
   const passed = score / total >= 0.66;
   const pct = Math.round((score / total) * 100);
+  const g = loadGlobal();
+  const modIdx = MODULES.findIndex(m => m.id === mod.id);
 
-  // Отмечаем модуль как завершённый
   if (passed) {
-    const g = loadGlobal();
     if (!g.completedModules.includes(mod.id)) {
       g.completedModules.push(mod.id);
+      g.totalXP = (g.totalXP || 0) + mod.totalXP;
+      window.trackModuleCompleted?.(mod, score, total, g.totalXP);
+
+      // Сообщаем боту — он отправит поздравление в Telegram
+      syncProgressToBot({
+        event:        "module_completed",
+        module_id:    mod.id,
+        module_title: mod.title,
+        xp_earned:    mod.totalXP,
+        total_xp:     g.totalXP,
+        badge_icon:   mod.badge.icon,
+        badge_name:   mod.badge.name,
+        is_last:      modIdx === MODULES.length - 1,
+      });
     }
-    // Автоматически открываем следующий модуль
-    const modIdx = MODULES.findIndex(m => m.id === mod.id);
-    if (modIdx + 1 < MODULES.length) {
-      g.currentModuleIndex = modIdx + 1;
-    }
+    if (modIdx + 1 < MODULES.length) g.currentModuleIndex = modIdx + 1;
     saveGlobal(g);
+  } else {
+    window.trackModuleFailed?.(mod, score, total);
   }
 
   document.getElementById("root").innerHTML = `
@@ -340,18 +357,13 @@ function renderComplete(mod, s) {
           <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:1px;">${mod.badge.name}</div>
         </div>
       </div>
-
-      <!-- CTA: регистрация (главная конверсия) -->
       <button onclick="openRegister()" style="width:100%;max-width:320px;padding:15px 0;border:none;border-radius:14px;background:linear-gradient(135deg,#00C896,#6C63FF);color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;">
         Create free account 🚀
       </button>
-
-      <!-- CTA: следующий модуль (retention) -->
       <button onclick="goNextModule()" style="width:100%;max-width:320px;padding:13px 0;background:transparent;color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);border-radius:14px;font-size:14px;cursor:pointer;margin-bottom:10px;">
         Next module →
       </button>
       ` : ""}
-
       <button onclick="retryModule()" style="width:100%;max-width:320px;padding:13px 0;background:transparent;color:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.08);border-radius:14px;font-size:13px;cursor:pointer;">
         ${passed ? "Back to Academy" : "Try again"}
       </button>
@@ -359,30 +371,20 @@ function renderComplete(mod, s) {
   `;
 }
 
-// ─── Actions (вызываются из inline onclick) ───────────────────────────────────
-function getCurrentMod() {
-  const g = loadGlobal();
-  return MODULES[g.currentModuleIndex];
-}
-
-function getCurrentState() {
-  return loadModuleState(getCurrentMod());
-}
+// ─── Actions ──────────────────────────────────────────────────────────────────
+function getCurrentMod() { return MODULES[loadGlobal().currentModuleIndex]; }
+function getCurrentState() { return loadModuleState(getCurrentMod()); }
 
 window.nextCard = function() {
-  const mod = getCurrentMod();
-  const s = getCurrentState();
+  const mod = getCurrentMod(), s = getCurrentState();
   const el = $("cw");
   if (el) { el.style.transform = "translateX(-60px)"; el.style.opacity = "0"; }
   setTimeout(() => {
     if (s.cardIndex < mod.cards.length - 1) {
-      s.cardIndex++;
-      saveModuleState(mod, s);
-      renderCard(mod, s);
+      s.cardIndex++; saveModuleState(mod, s); renderCard(mod, s);
     } else {
       s.phase = "quiz"; s.quizIndex = 0; s.quizScore = 0;
-      saveModuleState(mod, s);
-      renderQuiz(mod, s);
+      saveModuleState(mod, s); renderQuiz(mod, s);
     }
   }, 280);
 };
@@ -390,12 +392,12 @@ window.nextCard = function() {
 window.selectOption = function(idx) {
   if (_quizRevealed) return;
   _quizRevealed = true;
-  const mod = getCurrentMod();
-  const s = getCurrentState();
+  const mod = getCurrentMod(), s = getCurrentState();
   const q = mod.quiz[s.quizIndex];
   const ok = q.options[idx].correct;
   if (ok) s.quizScore++;
   saveModuleState(mod, s);
+  window.trackQuizAnswer?.(mod, s.quizIndex, ok);
 
   q.options.forEach((opt, i) => {
     const el = $(`opt-${i}`), b = $(`ob-${i}`);
@@ -418,43 +420,41 @@ window.selectOption = function(idx) {
 };
 
 window.nextQuiz = function() {
-  const mod = getCurrentMod();
-  const s = getCurrentState();
+  const mod = getCurrentMod(), s = getCurrentState();
   if (s.quizIndex < mod.quiz.length - 1) {
-    s.quizIndex++;
-    saveModuleState(mod, s);
-    renderQuiz(mod, s);
+    s.quizIndex++; saveModuleState(mod, s); renderQuiz(mod, s);
   } else {
-    s.phase = "complete";
-    saveModuleState(mod, s);
-    renderComplete(mod, s);
+    s.phase = "complete"; saveModuleState(mod, s); renderComplete(mod, s);
   }
 };
 
 window.goNextModule = function() {
+  const mod = getCurrentMod();
+  window.trackNextModuleCTA?.(mod);
   const g = loadGlobal();
-  const nextIdx = Math.min(g.currentModuleIndex, MODULES.length - 1);
-  if (nextIdx < MODULES.length) {
-    startModule(nextIdx);
-  } else {
-    renderHome();
-  }
+  if (g.currentModuleIndex < MODULES.length) startModule(g.currentModuleIndex);
+  else renderHome();
 };
 
 window.retryModule = function() {
   const mod = getCurrentMod();
-  const s = { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0 };
+  const s = { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: (loadModuleState(mod).attempt || 0) + 1 };
   saveModuleState(mod, s);
-  renderCard(mod, s);
+  const g = loadGlobal();
+  if (g.completedModules.includes(mod.id)) renderHome();
+  else renderCard(mod, s);
 };
 
 window.openDemo = function() {
   const mod = getCurrentMod();
+  window.trackDemoCTA?.(mod);
   openLink(buildURL(mod.cta.demo.url, mod.cta.demo.utm_content));
 };
 
 window.openRegister = function() {
   const mod = getCurrentMod();
+  const g = loadGlobal();
+  window.trackRegisterCTA?.(mod, g.totalXP);
   openLink(buildURL(mod.cta.register.url, mod.cta.register.utm_content));
 };
 
