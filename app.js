@@ -22,12 +22,14 @@ function openLink(url) {
 // ─── Three funnel CTAs ────────────────────────────────────────────────────────
 // Точка 1: последняя карточка → демо (низкое трение, до квиза)
 window.openDemo = function() {
-  openLink(buildURL("https://weltrade.com/demo", "card_last_demo_cta"));
+  openLink(buildURL("https://www.weltrade.com/education/account/", "card_last_demo_cta"));
 };
 
 // Точка 2: финальный экран → регистрация (главная конверсия)
 window.openRegister = function() {
-  openLink(buildURL("https://weltrade.com/register", "quiz_complete_register_cta"));
+  const base = "https://track.gowt.me/visit/";
+  const url = `${base}?bta=66558&brand=weltrade&utm_source=telegram_organic&utm_medium=tma&utm_campaign=academy_mod01&utm_content=quiz_complete_register_cta`;
+  openLink(url);
 };
 
 // Точка 3: финальный экран → следующий модуль (retention)
