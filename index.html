@@ -21,9 +21,14 @@
 <body>
   <div id="root"></div>
 
-  <!-- Добавляй новые модули сюда — engine подхватит автоматически -->
+  <!-- Модули загружаются по порядку — engine читает window.WT_MODULES -->
   <script src="mod01.js"></script>
   <script src="mod02.js"></script>
+  <script src="mod03.js"></script>
+  <script src="mod04.js"></script>
+  <script src="mod05.js"></script>
+
+  <!-- Engine всегда последний -->
   <script src="engine.js"></script>
 </body>
 </html>
