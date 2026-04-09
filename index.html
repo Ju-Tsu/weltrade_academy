@@ -21,12 +21,18 @@
 <body>
   <div id="root"></div>
 
-  <!-- Модули загружаются по порядку — engine читает window.WT_MODULES -->
+  <!-- Модули — порядок важен, engine читает WT_MODULES по индексу -->
   <script src="mod01.js"></script>
   <script src="mod02.js"></script>
   <script src="mod03.js"></script>
   <script src="mod04.js"></script>
   <script src="mod05.js"></script>
+
+  <!-- Аналитика — до engine, чтобы функции были доступны при старте -->
+  <script src="analytics.js"></script>
+
+  <!-- Промокоды инфлюенсеров — редактируй только этот файл -->
+  <script src="promo_config.js"></script>
 
   <!-- Engine всегда последний -->
   <script src="engine.js"></script>

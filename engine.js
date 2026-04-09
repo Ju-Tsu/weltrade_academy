@@ -13,7 +13,7 @@ if (!MODULES.length) {
 
 // ─── Bot Sync ─────────────────────────────────────────────────────────────────
 // Замени на свой Railway URL
-const BOT_WEBHOOK_URL = "https://web-production-17cd34.up.railway.app/tma-webhook";
+const BOT_WEBHOOK_URL = "https://ВАШ-ДОМЕН.up.railway.app/tma-webhook";
 
 function syncProgressToBot(payload) {
   try {
@@ -448,6 +448,11 @@ window.retryModule = function() {
 window.openDemo = function() {
   const mod = getCurrentMod();
   window.trackDemoCTA?.(mod);
+  // Сообщаем боту — через 3 дня он пришлёт demo trigger
+  syncProgressToBot({
+    event:     "demo_cta_clicked",
+    module_id: mod.id,
+  });
   openLink(buildURL(mod.cta.demo.url, mod.cta.demo.utm_content));
 };
 
@@ -460,3 +465,62 @@ window.openRegister = function() {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 renderHome();
+
+// ─── Promo Code Engine ────────────────────────────────────────────────────────
+// Читает промокод из promo_config.js по startapp параметру Telegram
+
+function getPromoCode() {
+  try {
+    const codes = window.WT_PROMO_CODES || {};
+    const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param || "";
+    return codes[startParam] || null;
+  } catch (e) { return null; }
+}
+
+window.copyPromo = function(code) {
+  try {
+    navigator.clipboard.writeText(code);
+  } catch (e) {
+    const el = document.createElement("textarea");
+    el.value = code;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+  const btn = document.getElementById("wt-copy-btn");
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.textContent = "✓ Copied!";
+  btn.style.cssText += ";background:rgba(0,200,150,.2);border-color:#00C896;color:#00C896;";
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.style.cssText += ";background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.7);";
+  }, 2000);
+};
+
+// Патчим renderComplete — добавляем промоблок перед кнопкой регистрации
+const _origRenderComplete = renderComplete;
+renderComplete = function(mod, s) {
+  _origRenderComplete(mod, s);
+
+  // После рендера проверяем промокод и вставляем блок если есть
+  const promoCode = getPromoCode();
+  if (!promoCode) return;
+
+  const registerBtn = document.querySelector("[onclick='openRegister()']");
+  if (!registerBtn) return;
+
+  const promoBlock = document.createElement("div");
+  promoBlock.style.cssText = "width:100%;max-width:320px;margin-bottom:16px;";
+  promoBlock.innerHTML = `
+    <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;text-align:center;">🎁 Your bonus code</div>
+    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,184,48,.3);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span style="font-family:monospace;font-size:24px;font-weight:800;color:#FFB830;letter-spacing:.08em;">${promoCode}</span>
+      <button id="wt-copy-btn" onclick="copyPromo('${promoCode}')" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 14px;font-size:12px;color:rgba(255,255,255,.7);cursor:pointer;white-space:nowrap;">Copy code</button>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.35);text-align:center;margin-top:6px;">Use this code when registering on Weltrade</div>
+  `;
+
+  registerBtn.parentNode.insertBefore(promoBlock, registerBtn);
+};
