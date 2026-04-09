@@ -70,10 +70,10 @@ function moduleKey(mod) { return `wt_state_${mod.id}`; }
 function loadModuleState(mod) {
   try {
     return JSON.parse(localStorage.getItem(moduleKey(mod))) || {
-      phase: T("cards_label"), cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0,
+      phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0,
     };
   } catch (e) {
-    return { phase: T("cards_label"), cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0 };
+    return { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: 0 };
   }
 }
 
@@ -98,13 +98,13 @@ const $ = id => document.getElementById(id);
 const TOTAL_STEPS = mod => mod.cards.length + mod.quiz.length;
 
 function currentStep(mod, s) {
-  if (s.phase === T("cards_label")) return s.cardIndex + 1;
+  if (s.phase === "cards") return s.cardIndex + 1;
   if (s.phase === "quiz")  return mod.cards.length + s.quizIndex + 1;
   return TOTAL_STEPS(mod);
 }
 
 function currentAccent(mod, s) {
-  if (s.phase === T("cards_label")) return mod.cards[s.cardIndex].accent;
+  if (s.phase === "cards") return mod.cards[s.cardIndex].accent;
   if (s.phase === "quiz")  return "#FFB830";
   return "#00C896";
 }
@@ -188,7 +188,7 @@ window.startModule = function(idx) {
   const mod = MODULES[idx];
   const s = loadModuleState(mod);
 
-  if (s.cardIndex === 0 && s.phase === T("cards_label")) {
+  if (s.cardIndex === 0 && s.phase === "cards") {
     window.trackModuleStarted?.(mod, idx);
   }
 
@@ -199,7 +199,7 @@ window.startModule = function(idx) {
     module_title: mod.title,
   });
 
-  if (s.phase === T("cards_label"))     renderCard(mod, s);
+  if (s.phase === "cards")     renderCard(mod, s);
   else if (s.phase === "quiz") renderQuiz(mod, s);
   else                         renderComplete(mod, s);
 };
@@ -233,9 +233,9 @@ function renderShell(mod, s) {
       <div style="display:flex;justify-content:center;align-items:center;gap:5px;padding-bottom:20px;z-index:1;">
         ${mod.cards.map((_, i) => `
           <div style="height:5px;border-radius:999px;transition:all .3s ease;
-            width:${i === s.cardIndex && s.phase === T("cards_label") ? 18 : 5}px;
-            background:${i < s.cardIndex || s.phase !== T("cards_label") ? acc : i === s.cardIndex && s.phase === T("cards_label") ? acc : "rgba(255,255,255,.2)"};
-            opacity:${i > s.cardIndex && s.phase === T("cards_label") ? .4 : 1};
+            width:${i === s.cardIndex && s.phase === "cards" ? 18 : 5}px;
+            background:${i < s.cardIndex || s.phase !== "cards" ? acc : i === s.cardIndex && s.phase === "cards" ? acc : "rgba(255,255,255,.2)"};
+            opacity:${i > s.cardIndex && s.phase === "cards" ? .4 : 1};
           "></div>`).join("")}
         <div style="height:5px;width:5px;border-radius:999px;background:${s.phase === "quiz" ? "#FFB830" : "rgba(255,255,255,.2)"};transition:all .3s;"></div>
       </div>
@@ -459,7 +459,7 @@ window.goNextModule = function() {
 
 window.retryModule = function() {
   const mod = getCurrentMod();
-  const s = { phase: T("cards_label"), cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: (loadModuleState(mod).attempt || 0) + 1 };
+  const s = { phase: "cards", cardIndex: 0, quizIndex: 0, quizScore: 0, attempt: (loadModuleState(mod).attempt || 0) + 1 };
   saveModuleState(mod, s);
   const g = loadGlobal();
   if (g.completedModules.includes(mod.id)) renderHome();
