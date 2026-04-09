@@ -27,6 +27,18 @@ if (!MODULES.length) {
 // Shortcut для переводов UI
 const T = window.t || (key => key);
 
+// ─── Language Switcher Builder ─────────────────────────────────────────────────
+function buildLangSwitcher() {
+  return ["en","es","pt"].map(function(l) {
+    var active = window.WT_LANG === l;
+    var bg = active ? "rgba(108,99,255,.3)" : "rgba(255,255,255,.06)";
+    var border = active ? "#6C63FF" : "rgba(255,255,255,.1)";
+    var color = active ? "#fff" : "rgba(255,255,255,.4)";
+    var weight = active ? "700" : "400";
+    return '<button onclick="setLang(\'' + l + '\')" style="background:' + bg + ';border:1px solid ' + border + ';border-radius:6px;padding:3px 7px;font-size:11px;color:' + color + ';cursor:pointer;font-weight:' + weight + ';">' + l.toUpperCase() + '</button>';
+  }).join("");
+}
+
 // ─── Bot Sync ─────────────────────────────────────────────────────────────────
 // Замени на свой Railway URL
 const BOT_WEBHOOK_URL = "https://ВАШ-ДОМЕН.up.railway.app/tma-webhook";
@@ -125,8 +137,8 @@ window.renderHome = function() {
       <div style="margin-bottom:28px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
           <div style="font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.08em;text-transform:uppercase;">${T("brand")}</div>
-          <div style="display:flex;gap:4px;">
-            ${["en","es","pt"].map(l => \`<button onclick="setLang('${l}')" style="background:\${window.WT_LANG===l?"rgba(108,99,255,.3)":"rgba(255,255,255,.06)"};border:1px solid \${window.WT_LANG===l?"#6C63FF":"rgba(255,255,255,.1)"};border-radius:6px;padding:3px 7px;font-size:11px;color:\${window.WT_LANG===l?"#fff":"rgba(255,255,255,.4)"};cursor:pointer;font-weight:\${window.WT_LANG===l?"700":"400"};">\${l.toUpperCase()}</button>\`).join("")}
+          <div style="display:flex;gap:4px;" id="lang-switcher">
+            ${buildLangSwitcher()}
           </div>
         </div>
         <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.03em;line-height:1.2;">${T("home_title")}</div>
