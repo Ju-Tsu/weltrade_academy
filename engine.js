@@ -41,7 +41,7 @@ function buildLangSwitcher() {
 
 // ─── Bot Sync ─────────────────────────────────────────────────────────────────
 // Замени на свой Railway URL
-const BOT_WEBHOOK_URL = "https://ВАШ-ДОМЕН.up.railway.app/tma-webhook";
+const BOT_WEBHOOK_URL = "https://web-production-17cd34.up.railway.app/tma-webhook";
 
 function syncProgressToBot(payload) {
   try {
