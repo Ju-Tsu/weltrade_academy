@@ -21,20 +21,32 @@
 <body>
   <div id="root"></div>
 
-  <!-- Модули — порядок важен, engine читает WT_MODULES по индексу -->
+  <!-- EN modules (default) -->
   <script src="mod01.js"></script>
   <script src="mod02.js"></script>
   <script src="mod03.js"></script>
   <script src="mod04.js"></script>
   <script src="mod05.js"></script>
 
-  <!-- Аналитика — до engine, чтобы функции были доступны при старте -->
-  <script src="analytics.js"></script>
+  <!-- ES modules -->
+  <script src="mod01_es.js"></script>
+  <script src="mod02_es.js"></script>
+  <script src="mod03_05_es.js"></script>
 
-  <!-- Промокоды инфлюенсеров — редактируй только этот файл -->
+  <!-- PT-BR modules -->
+  <script src="mod01_pt.js"></script>
+  <script src="mod02_05_pt.js"></script>
+
+  <!-- i18n: language detection + UI translations. Load AFTER modules -->
+  <script src="i18n.js"></script>
+
+  <!-- Influencer promo codes — only file to edit when adding influencers -->
   <script src="promo_config.js"></script>
 
-  <!-- Engine всегда последний -->
+  <!-- Analytics -->
+  <script src="analytics.js"></script>
+
+  <!-- Engine always last -->
   <script src="engine.js"></script>
 </body>
 </html>
